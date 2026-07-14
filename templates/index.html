@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Delivery Helper</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .suggestions-box {
+            position: absolute;
+            z-index: 1000;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .vehicle-card {
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .vehicle-card:hover {
+            transform: scale(1.02);
+        }
+        .selected-vehicle {
+            border: 3px solid #198754 !important;
+            background-color: #f8fff9;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    
+    <nav class="navbar navbar-light bg-white shadow-sm mb-4">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1 text-primary fw-bold">Delivery Helper</span>
+            <div class="d-flex align-items-center">
+                <span class="me-3 text-muted">Logged in as <strong>{{ current_user.username }}</strong></span>
+                <a href="/profile" class="btn btn-outline-primary btn-sm me-2">My Profile</a>
+                <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="max-width: 800px;">
+        
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-body p-4">
+                <h4 class="card-title mb-4">Book a Delivery</h4>
+                <form action="/" method="POST" id="booking-form">
+                    
+                    <input type="hidden" name="vehicle_type" id="hidden_vehicle" required>
+                    <input type="hidden" name="price" id="hidden_price" required>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small mb-1">Item</label>
+                            <input type="text" class="form-control" name="item_name" placeholder="What needs delivering?" required>
+                        </div>
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label text-muted small mb-1">Pickup</label>
+                            <input type="text" class="form-control" id="pickup" name="pickup_location" placeholder="Search Pickup..." autocomplete="off" required>
+                            <div id="pickup-suggestions" class="list-group suggestions-box mt-1"></div>
+                        </div>
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label text-muted small mb-1">Drop-off</label>
+                            <input type="text" class="form-control" id="dropoff" name="dropoff_location" placeholder="Search Drop-off..." autocomplete="off" required>
+                            <div id="dropoff-suggestions" class="list-group suggestions-box mt-1"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-center">
+                        <button type="button" class="btn btn-warning fw-bold px-5" id="btn-calculate">Get Fare Estimate</button>
+                    </div>
+
+                    <div id="pricing-section" class="mt-4" style="display: none;">
+                        <hr>
+                        <p class="text-muted mb-2">Distance: <strong id="distance-display">0</strong> km. Select a vehicle:</p>
+                        
+                        <div class="row g-3 mb-4">
+                            <div class="col-6">
+                                <div class="card vehicle-card border" id="card-bike" onclick="selectVehicle('Two-Wheeler', priceBikeVal, 'card-bike')">
+                                    <div class="card-body text-center">
+                                        <h1 class="mb-2">🏍️</h1>
+                                        <h5 class="card-title">2 Wheeler</h5>
+                                        <h4 class="text-success fw-bold">₹<span id="price-bike">0</span></h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="card vehicle-card border" id="card-truck" onclick="selectVehicle('Four-Wheeler', priceTruckVal, 'card-truck')">
+                                    <div class="card-body text-center">
+                                        <h1 class="mb-2">🚚</h1>
+                                        <h5 class="card-title">Four Wheeler</h5>
+                                        <h4 class="text-primary fw-bold">₹<span id="price-truck">0</span></h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-end" id="submit-section" style="display: none;">
+                            <button type="submit" class="btn btn-success px-5 fw-bold fs-5">Book Now</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <h4 class="mb-3">Open Delivery Jobs</h4>
+
+        <div class="card shadow-sm mb-4 border-0 bg-white">
+            <div class="card-body p-3">
+                <form action="/" method="GET" class="d-flex">
+                    <input type="text" class="form-control me-2" name="search" placeholder="Search for an item (e.g., pizza, keys)...">
+                    <button type="submit" class="btn btn-outline-primary fw-bold px-4">Search</button>
+                    <a href="/" class="btn btn-outline-secondary ms-2">Clear</a>
+                </form>
+            </div>
+        </div>
+
+        <ul class="list-group shadow-sm mb-5">
+            {% for task in tasks %}
+                <li class="list-group-item d-flex justify-content-between align-items-center p-3">
+                    <div>
+                        <h5 class="mb-1 text-dark">{{ task.item_name }}</h5>
+                        <p class="mb-1 text-secondary">
+                            <strong>From:</strong> {{ task.pickup_location }} | <strong>To:</strong> {{ task.dropoff_location }} <br>
+                            <span class="badge bg-secondary mt-2 me-2">Requires: {{ task.vehicle_type }}</span>
+                            <span class="badge bg-success mt-2">Payout: ₹{{ task.price }}</span>
+                        </p>
+                        
+                        {% if task.status == 'Pending' %}
+                            <span class="badge bg-warning text-dark mt-1 px-3 py-2">Pending</span>
+                        {% else %}
+                            <span class="badge bg-info text-dark mt-1 px-3 py-2">Accepted by: {{ task.accepter.username }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div>
+                        {% if task.status == 'Pending' %}
+                            {% if task.requester_id == current_user.id %}
+                                <button class="btn btn-outline-secondary fw-bold" disabled>Waiting for Helper...</button>
+                            {% else %}
+                                <form action="/accept/{{ task.id }}" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn btn-outline-success fw-bold">Accept Job</button>
+                                </form>
+                            {% endif %}
+                        {% elif task.status == 'Accepted' %}
+                            <form action="/complete/{{ task.id }}" method="POST" style="display:inline;">
+                                <button type="submit" class="btn btn-success fw-bold">Mark Delivered</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </li>
+            {% else %}
+                <div class="alert alert-light text-center text-muted" role="alert">
+                    No jobs currently available.
+                </div>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <script>
+        let priceBikeVal = 0;
+        let priceTruckVal = 0;
+
+        function setupAutocomplete(inputId, suggestionsId) {
+            const input = document.getElementById(inputId);
+            const suggestionsBox = document.getElementById(suggestionsId);
+            let timeout = null;
+
+            input.addEventListener('input', function() {
+                clearTimeout(timeout);
+                const query = this.value;
+                if (query.length < 3) {
+                    suggestionsBox.innerHTML = '';
+                    return;
+                }
+                timeout = setTimeout(() => {
+                    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&countrycodes=in&limit=5`)
+                        .then(response => response.json())
+                        .then(data => {
+                            suggestionsBox.innerHTML = '';
+                            data.forEach(place => {
+                                const div = document.createElement('div');
+                                div.className = 'list-group-item list-group-item-action py-2';
+                                div.style.cursor = 'pointer';
+                                div.style.fontSize = '0.85rem';
+                                div.textContent = place.display_name;
+                                div.onclick = function() {
+                                    input.value = place.display_name;
+                                    input.dataset.lat = place.lat;
+                                    input.dataset.lon = place.lon;
+                                    suggestionsBox.innerHTML = '';
+                                };
+                                suggestionsBox.appendChild(div);
+                            });
+                        });
+                }, 500); 
+            });
+
+            document.addEventListener('click', function(e) {
+                if (e.target !== input) suggestionsBox.innerHTML = '';
+            });
+        }
+
+        setupAutocomplete('pickup', 'pickup-suggestions');
+        setupAutocomplete('dropoff', 'dropoff-suggestions');
+
+        document.getElementById('btn-calculate').addEventListener('click', function() {
+            const pickupInput = document.getElementById('pickup');
+            const dropoffInput = document.getElementById('dropoff');
+
+            const lat1 = pickupInput.dataset.lat;
+            const lon1 = pickupInput.dataset.lon;
+            const lat2 = dropoffInput.dataset.lat;
+            const lon2 = dropoffInput.dataset.lon;
+
+            if (!lat1 || !lon1 || !lat2 || !lon2) {
+                alert("Please select both Pickup and Drop-off locations from the dropdown suggestions first!");
+                return;
+            }
+
+            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+
+            fetch(osrmUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.code === 'Ok') {
+                        const distanceKm = (data.routes[0].distance / 1000).toFixed(1);
+                        
+                        priceBikeVal = Math.round(30 + (distanceKm * 12));
+                        priceTruckVal = Math.round(100 + (distanceKm * 30));
+
+                        document.getElementById('distance-display').innerText = distanceKm;
+                        document.getElementById('price-bike').innerText = priceBikeVal;
+                        document.getElementById('price-truck').innerText = priceTruckVal;
+                        
+                        document.getElementById('pricing-section').style.display = 'block';
+                        document.getElementById('btn-calculate').style.display = 'none'; 
+                    } else {
+                        alert("Could not calculate route. Please try different locations.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error calculating distance:", error);
+                    alert("Error connecting to the routing server.");
+                });
+        });
+
+        function selectVehicle(vehicleName, priceVal, cardId) {
+            document.getElementById('card-bike').classList.remove('selected-vehicle');
+            document.getElementById('card-truck').classList.remove('selected-vehicle');
+            
+            document.getElementById(cardId).classList.add('selected-vehicle');
+            
+            document.getElementById('hidden_vehicle').value = vehicleName;
+            document.getElementById('hidden_price').value = priceVal;
+            
+            document.getElementById('submit-section').style.display = 'block';
+        }
+    </script>
+</body>
+</html>

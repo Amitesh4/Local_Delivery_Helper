@@ -1,0 +1,10 @@
+# Ignore the virtual environment
+venv/
+ENV/
+
+# Ignore Flask instance folder (contains local databases/secrets)
+instance/
+
+# Python cache files
+__pycache__/
+*.pyc
